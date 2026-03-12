@@ -35,8 +35,13 @@ fake = Faker('en_US')
 # --- CONFIGURATION ---
 BOT_NAME = "@nasahoker_bot"
 DEV_NAME = "@xenlize"
-ADMIN_ID = "6193794414"
-TOKEN = "8407498716:AAFaRVwVHtIqgY15oiJZuZtPgIDpELfVBrc"
+ADMIN_ID = os.getenv("ADMIN_ID", "6193794414")  # Set in Railway environment variables
+TOKEN = os.getenv("BOT_TOKEN")  # MUST be set in Railway environment variables
+
+if not TOKEN:
+    print("ERROR: BOT_TOKEN environment variable not set!")
+    print("Please set BOT_TOKEN in Railway dashboard → Variables")
+    exit(1)
 
 # --- MULTIPLE SITES FOR REDUNDANCY ---
 DONATION_SITES = [
