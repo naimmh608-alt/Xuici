@@ -36,7 +36,7 @@ fake = Faker('en_US')
 BOT_NAME = "@nasahoker_bot"
 DEV_NAME = "@xenlize"
 ADMIN_ID = "6193794414"
-TOKEN = "8407498716:AAFaRVwVHtIqgY15oiJZuZtPgIDpELfVBrc"
+TOKEN = "8304090513:AAGtSpPGBAhFoOG2S8_T9q0Uou0YCfVSj74"
 
 # --- PROXY LIST (REMOVED) ---
 PROXIES = ["geo.iproyal.com:12321:Aprimebd10:Aprimebd1010_country-us"]
@@ -126,7 +126,7 @@ class PayPalCommerce:
     def __init__(self, proxy=None):
         self.r = requests.Session()
         self.ua = generate_user_agent()
-        self.url = "scienceforthechurch.org"
+        self.url = "bgcrusk.com"
         
     def Key(self):
         # Direct connection only
