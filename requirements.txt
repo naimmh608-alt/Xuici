@@ -1,1 +1,6 @@
-python-3.11.7
+python-telegram-bot==13.15
+requests==2.31.0
+httpx==0.25.2
+faker==20.1.0
+requests-toolbelt==1.0.0
+user-agent==0.1.10
